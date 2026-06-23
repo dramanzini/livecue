@@ -29,8 +29,20 @@ export default function NowPlaying({ song, active, transport }) {
     countdown = formatTime(seconds);
   }
 
+  // Big timecode: elapsed time within the current song + musical bar·beat.
+  const beatsPerBar = transport.signatureNum || 4;
+  const relBeats = Math.max(0, t - song.startTime);
+  const elapsed = floorTime((relBeats / tempo) * 60);
+  const bar = Math.floor(relBeats / beatsPerBar) + 1;
+  const beat = Math.floor(relBeats % beatsPerBar) + 1;
+
   return (
     <div className="nowplaying">
+      <div className={"np-timecode" + (transport.isPlaying ? " playing" : "")}>
+        {elapsed}
+      </div>
+      <div className="np-barbeat">{bar}.{beat}</div>
+
       <div className={"np-label" + (transport.isPlaying ? " playing" : "")}>
         {transport.isPlaying ? "Now playing" : "Ready to play"}
       </div>
@@ -66,6 +78,14 @@ export default function NowPlaying({ song, active, transport }) {
 
 function formatTime(seconds) {
   const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
+}
+
+// Like formatTime but floored — the big timecode shouldn't show 0:01 before a
+// full second has elapsed.
+function floorTime(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
