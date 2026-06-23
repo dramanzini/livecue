@@ -31,7 +31,9 @@ export default function NowPlaying({ song, active, transport }) {
 
   return (
     <div className="nowplaying">
-      <div className="np-label">Now playing</div>
+      <div className={"np-label" + (transport.isPlaying ? " playing" : "")}>
+        {transport.isPlaying ? "Now playing" : "Ready to play"}
+      </div>
       <h1 className="np-title">{song.title}</h1>
       <div className="np-section">
         {section ? section.name : "—"}
