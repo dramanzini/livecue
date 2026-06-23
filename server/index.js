@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 
 import { AbletonBridge } from "./ableton.js";
-import { buildSetlist, locate } from "./setlist.js";
+import { buildSetlist, applyOrder, locate } from "./setlist.js";
 import { load, save, setLyrics } from "./store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -17,8 +17,16 @@ const app = express();
 app.use(express.json());
 
 const ableton = new AbletonBridge();
-let setlist = [];
+let rawCuePoints = [];      // last locators received from Live/simulator
+let setlist = [];           // built + custom-ordered
 let connection = { connected: false, simulated: false };
+
+// Rebuild the setlist from the latest locators and the saved custom order.
+async function rebuildSetlist() {
+  const store = await load();
+  setlist = applyOrder(buildSetlist(rawCuePoints), store.order);
+  return store;
+}
 
 // ---- REST API --------------------------------------------------------------
 
@@ -64,7 +72,7 @@ function snapshot() {
   const { activeSong, activeSection } = locate(setlist, ableton.state.songTime);
   return {
     type: "state",
-    connection,
+    connection: { ...connection, backups: ableton.backups.length },
     transport: ableton.state,
     activeSong,
     activeSection,
@@ -105,6 +113,26 @@ function handleCommand(cmd) {
       if (song) ableton.locate(song.startTime);
       break;
     }
+    case "loopSection": {
+      for (const song of setlist) {
+        const sec = song.sections.find((s) => s.id === cmd.id);
+        if (sec && sec.endTime != null) {
+          ableton.setLoop(sec.time, sec.endTime - sec.time, sec.id);
+          return;
+        }
+      }
+      break;
+    }
+    case "loopOff": ableton.clearLoop(); break;
+    case "reorder": {
+      // cmd.order is the new array of song ids; persist and rebuild.
+      save({ order: Array.isArray(cmd.order) ? cmd.order : null })
+        .then(rebuildSetlist)
+        .then((store) =>
+          broadcast({ type: "setlist", setlist, lyrics: store.lyrics, notes: store.notes })
+        );
+      break;
+    }
     case "refresh": ableton.refreshCuePoints(); break;
     default: break;
   }
@@ -113,8 +141,8 @@ function handleCommand(cmd) {
 // ---- wire Ableton bridge to clients ---------------------------------------
 
 ableton.on("cuepoints", (cps) => {
-  setlist = buildSetlist(cps);
-  load().then((store) =>
+  rawCuePoints = cps;
+  rebuildSetlist().then((store) =>
     broadcast({ type: "setlist", setlist, lyrics: store.lyrics, notes: store.notes })
   );
 });

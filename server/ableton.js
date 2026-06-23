@@ -15,6 +15,18 @@ const RECV_PORT = Number(process.env.ABLETON_RECV_PORT || 11001); // AbletonOSC 
 const ABLETON_HOST = process.env.ABLETON_HOST || "127.0.0.1";
 const LOCAL_RECV_PORT = Number(process.env.LOCAL_RECV_PORT || RECV_PORT);
 
+// Multi-machine redundancy: mirror every outgoing command to one or more backup
+// rigs running AbletonOSC. Set BACKUP_HOSTS="192.168.0.5,192.168.0.6" (each may
+// include :port, defaulting to ABLETON_SEND_PORT).
+const BACKUP_HOSTS = (process.env.BACKUP_HOSTS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean)
+  .map((entry) => {
+    const [host, port] = entry.split(":");
+    return { host, port: Number(port || SEND_PORT) };
+  });
+
 export class AbletonBridge extends EventEmitter {
   constructor() {
     super();
@@ -27,7 +39,9 @@ export class AbletonBridge extends EventEmitter {
       songTime: 0, // beats
       signatureNum: 4,
       signatureDenom: 4,
+      loop: { enabled: false, start: 0, length: 0, sectionId: null },
     };
+    this.backups = BACKUP_HOSTS;
     this._lastPong = 0;
     this._sim = null;
   }
@@ -72,9 +86,23 @@ export class AbletonBridge extends EventEmitter {
   // ---- outgoing commands -------------------------------------------------
 
   send(address, args = []) {
-    if (this.simulated) return this._simHandle(address, args);
+    if (this.simulated) {
+      this._mirror(address, args); // backups may be real rigs even while we simulate
+      return this._simHandle(address, args);
+    }
     if (!this.udp) return;
-    this.udp.send({ address, args: args.map(toArg) }, ABLETON_HOST, SEND_PORT);
+    const packet = { address, args: args.map(toArg) };
+    this.udp.send(packet, ABLETON_HOST, SEND_PORT);
+    this._mirror(address, args, packet);
+  }
+
+  // Mirror commands (not queries) to backup rigs for redundant playback.
+  _mirror(address, args, packet) {
+    if (!this.backups.length) return;
+    if (address.includes("/get/") || address.includes("/listen")) return; // commands only
+    const p = packet || { address, args: args.map(toArg) };
+    if (!this.udp) return;
+    for (const b of this.backups) this.udp.send(p, b.host, b.port);
   }
 
   play() { this.send("/live/song/start_playing"); }
@@ -87,6 +115,21 @@ export class AbletonBridge extends EventEmitter {
 
   nextCue() { this.send("/live/song/jump_to_next_cue"); }
   prevCue() { this.send("/live/song/jump_to_prev_cue"); }
+
+  // Loop a region of the arrangement (beats). Used to loop the active section.
+  setLoop(start, length, sectionId = null) {
+    this.state.loop = { enabled: true, start, length, sectionId };
+    this.send("/live/song/set/loop_start", [Number(start)]);
+    this.send("/live/song/set/loop_length", [Number(length)]);
+    this.send("/live/song/set/loop", [1]);
+    this.emit("state", this.state);
+  }
+
+  clearLoop() {
+    this.state.loop = { enabled: false, start: 0, length: 0, sectionId: null };
+    this.send("/live/song/set/loop", [0]);
+    this.emit("state", this.state);
+  }
 
   refreshCuePoints() { this.send("/live/song/get/cue_points"); }
 
@@ -187,6 +230,10 @@ export class AbletonBridge extends EventEmitter {
       if (this.state.isPlaying) {
         // advance song time at tempo (beats per 100ms)
         this.state.songTime += (this.state.tempo / 60) * 0.1;
+        const loop = this.state.loop;
+        if (loop.enabled && loop.length > 0 && this.state.songTime >= loop.start + loop.length) {
+          this.state.songTime = loop.start; // wrap within the looped section
+        }
         const last = this.cuePoints[this.cuePoints.length - 1];
         if (last && this.state.songTime > last.time + 32) this.state.songTime = 0;
         this.emit("state", this.state);

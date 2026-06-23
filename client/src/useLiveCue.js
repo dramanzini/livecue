@@ -59,11 +59,15 @@ export function useLiveCue() {
     play: () => send({ type: "play" }),
     stop: () => send({ type: "stop" }),
     continue: () => send({ type: "continue" }),
+    toggle: () => send({ type: transport.isPlaying ? "stop" : "play" }),
     nextCue: () => send({ type: "nextCue" }),
     prevCue: () => send({ type: "prevCue" }),
     setTempo: (value) => send({ type: "tempo", value }),
     gotoSong: (id) => send({ type: "gotoSong", id }),
     gotoSection: (id) => send({ type: "gotoSection", id }),
+    loopSection: (id) => send({ type: "loopSection", id }),
+    loopOff: () => send({ type: "loopOff" }),
+    reorder: (order) => send({ type: "reorder", order }),
     refresh: () => send({ type: "refresh" }),
   };
 
@@ -76,5 +80,14 @@ export function useLiveCue() {
     });
   }, []);
 
-  return { setlist, lyrics, notes, transport, active, connection, online, cmd, saveLyrics };
+  const saveNotes = useCallback(async (title, text) => {
+    setNotes((n) => ({ ...n, [title]: text }));
+    await fetch(`/api/notes/${encodeURIComponent(title)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+  }, []);
+
+  return { setlist, lyrics, notes, transport, active, connection, online, cmd, saveLyrics, saveNotes };
 }

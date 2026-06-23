@@ -65,14 +65,28 @@ npm start            # server serves the app + API on :3000
 Override ports/host with env vars if needed:
 `ABLETON_HOST`, `ABLETON_SEND_PORT`, `ABLETON_RECV_PORT`, `PORT`.
 
-## Roadmap
+## Features
 
-- [ ] Drag-and-drop setlist reordering (override locator order, persisted)
-- [ ] Loop a section (set Live's loop region to the active section)
-- [ ] Time-synced lyrics (per-line timestamps following the beat position)
-- [ ] MIDI / footswitch control of transport
-- [ ] Multi-machine redundancy (mirror commands to a backup rig)
-- [ ] Per-song notes & countdown to next song
+- **Setlist from locators** — songs and sections built automatically from your
+  arrangement; tap to jump anywhere.
+- **Drag-and-drop reordering** — tap *Reorder*, drag songs into a custom order
+  (works on touch and desktop). Persisted on the server; navigation order can
+  differ from the arrangement.
+- **Loop a section** — the ↻ button on any section sets Live's loop region to
+  that section so you can vamp until ready.
+- **Synced lyrics** — enter lyrics with `[Section]` headers; the matching block
+  highlights and auto-scrolls as Live moves through the song.
+- **Per-song notes** — cues/reminders stored on the server, shared across devices.
+- **Countdown** — time remaining until the next song, based on tempo and position.
+- **MIDI & keyboard control** — map a footswitch/controller (Web MIDI) to
+  play/stop/next/prev, or use <kbd>Space</kbd> / <kbd>←</kbd> / <kbd>→</kbd>.
+- **Multi-machine redundancy** — set `BACKUP_HOSTS` to mirror every transport
+  command to one or more backup rigs running AbletonOSC.
+
+```bash
+# Example: mirror commands to two backup machines
+BACKUP_HOSTS="192.168.0.5,192.168.0.6" npm start
+```
 
 ## License
 

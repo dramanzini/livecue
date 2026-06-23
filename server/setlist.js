@@ -72,6 +72,21 @@ export function locate(songs, songTime) {
   return { activeSong, activeSection };
 }
 
+// Apply a saved custom order (array of song ids). Songs in `order` come first
+// in that order; any songs not listed keep their original (locator) order at the
+// end. Unknown ids in `order` are ignored. This only changes setlist navigation
+// order — jumping to a song still uses its locator's beat time.
+export function applyOrder(songs, order) {
+  if (!Array.isArray(order) || !order.length) return songs;
+  const byId = new Map(songs.map((s) => [s.id, s]));
+  const out = [];
+  for (const id of order) {
+    if (byId.has(id)) { out.push(byId.get(id)); byId.delete(id); }
+  }
+  for (const s of songs) if (byId.has(s.id)) out.push(s);
+  return out;
+}
+
 function slug(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "song";
 }

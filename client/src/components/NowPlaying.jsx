@@ -11,16 +11,30 @@ export default function NowPlaying({ song, active, transport }) {
 
   const section = song.sections.find((s) => s.id === active.activeSection);
   const t = transport.songTime;
+  const tempo = transport.tempo || 120;
   let progress = 0;
   if (section && section.endTime != null && section.endTime > section.time) {
     progress = Math.min(1, Math.max(0, (t - section.time) / (section.endTime - section.time)));
+  }
+
+  // Countdown to the next song (end of current song), in seconds.
+  const loop = transport.loop;
+  let countdown = null;
+  if (!loop?.enabled && song.endTime != null && song.endTime > t) {
+    const seconds = ((song.endTime - t) / tempo) * 60;
+    countdown = formatTime(seconds);
   }
 
   return (
     <div className="nowplaying">
       <div className="np-label">Now playing</div>
       <h1 className="np-title">{song.title}</h1>
-      <div className="np-section">{section ? section.name : "—"}</div>
+      <div className="np-section">
+        {section ? section.name : "—"}
+        {loop?.enabled && loop?.sectionId && section?.id === loop.sectionId && (
+          <span className="loop-tag">↻ loop</span>
+        )}
+      </div>
 
       <div className="np-progress">
         <div className="np-progress-fill" style={{ width: `${progress * 100}%` }} />
@@ -36,9 +50,16 @@ export default function NowPlaying({ song, active, transport }) {
 
       <div className="np-meta">
         <span>{transport.isPlaying ? "▶ Playing" : "⏸ Stopped"}</span>
-        <span>{Math.round(transport.tempo)} BPM</span>
+        <span>{Math.round(tempo)} BPM</span>
         <span>bar {Math.floor(t / 4) + 1}</span>
+        {countdown && <span className="np-countdown">next in {countdown}</span>}
       </div>
     </div>
   );
+}
+
+function formatTime(seconds) {
+  const s = Math.max(0, Math.round(seconds));
+  const m = Math.floor(s / 60);
+  return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
