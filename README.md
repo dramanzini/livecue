@@ -55,12 +55,33 @@ npm start            # server serves the app + API on :3000
 
 ## Connecting Ableton Live
 
-1. Install **AbletonOSC**: copy the `AbletonOSC` folder into Live's *Remote Scripts*
-   directory (see its README), then enable it as a Control Surface in
-   *Live → Settings → Link/MIDI*.
-2. AbletonOSC listens on UDP **11000** and replies on **11001** — LiveCue's defaults.
-3. Start LiveCue. The badge in the header switches from **Simulation** to
-   **Ableton Live** once it gets a reply.
+LiveCue talks to Live over OSC on UDP **11000/11001** (LiveCue's defaults). Pick
+the bridge that matches your Live version:
+
+### Live 11 / 12 — AbletonOSC
+
+1. Install **AbletonOSC**: copy the `AbletonOSC` folder into Live's *Remote
+   Scripts* directory, then enable it as a Control Surface in
+   *Live → Settings → Link/Tempo/MIDI*.
+
+### Live 10 — bundled `LiveCueOSC` remote script
+
+AbletonOSC requires Live 11+. For Live 10, this repo ships a tiny Python 2.7
+remote script in [`ableton-live10/LiveCueOSC`](ableton-live10/LiveCueOSC) that
+implements the same OSC subset LiveCue needs (transport, tempo, locators/cue
+points, jump, loop) — so the server is identical for both.
+
+1. Copy the `LiveCueOSC` folder into your *Remote Scripts* directory:
+   `~/Music/Ableton/User Library/Remote Scripts/` (create it if missing).
+2. **Restart Live 10**, then in *Live → Preferences → Link/MIDI* set a
+   **Control Surface** to **LiveCueOSC** (leave Input/Output as *None* — it
+   talks over UDP, not MIDI).
+
+### Then, for either version
+
+- Start LiveCue. The header badge switches from **Simulation** to
+  **Ableton Live** once it gets a reply.
+- Name your arrangement locators with the notation above and hit **⟳**.
 
 Override ports/host with env vars if needed:
 `ABLETON_HOST`, `ABLETON_SEND_PORT`, `ABLETON_RECV_PORT`, `PORT`.
