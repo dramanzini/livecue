@@ -1,4 +1,5 @@
-# LiveCueOSC — minimal OSC bridge for Ableton Live 10 (Python 2.7).
+# -*- coding: utf-8 -*-
+# LiveCueOSC - minimal OSC bridge for Ableton Live 10 (Python 2.7).
 #
 # AbletonOSC only supports Live 11+. This script gives Live 10 the small subset
 # of the same OSC API that LiveCue needs, so the LiveCue server works unchanged.
