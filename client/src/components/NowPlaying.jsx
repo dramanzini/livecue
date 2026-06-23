@@ -12,9 +12,13 @@ export default function NowPlaying({ song, active, transport }) {
   const section = song.sections.find((s) => s.id === active.activeSection);
   const t = transport.songTime;
   const tempo = transport.tempo || 120;
+  // Progress across the active section, or across the whole song if it has none.
+  const span = section
+    ? { start: section.time, end: section.endTime }
+    : { start: song.startTime, end: song.endTime };
   let progress = 0;
-  if (section && section.endTime != null && section.endTime > section.time) {
-    progress = Math.min(1, Math.max(0, (t - section.time) / (section.endTime - section.time)));
+  if (span.end != null && span.end > span.start) {
+    progress = Math.min(1, Math.max(0, (t - span.start) / (span.end - span.start)));
   }
 
   // Countdown to the next song (end of current song), in seconds.

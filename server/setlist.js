@@ -23,6 +23,9 @@ export function buildSetlist(cuePoints) {
     const title = SONG_PREFIX.test(cp.name) ? cp.name.replace(SONG_PREFIX, "").trim() : cp.name.trim();
 
     if (isSong || !current) {
+      // Each song is playable from its own startTime (tap the song row). We do
+      // NOT add a redundant "Start" section — sections are only the real
+      // sub-locators inside the song (Song: mode), if any.
       current = {
         id: slug(isSong ? title : `song-${songs.length + 1}`) + "-" + songs.length,
         title: isSong ? title : title || `Song ${songs.length + 1}`,
@@ -30,14 +33,6 @@ export function buildSetlist(cuePoints) {
         sections: [],
       };
       songs.push(current);
-      // A "Song:" locator also acts as the first section boundary only if it has
-      // its own label distinct from a following section. We push it as a section
-      // so the song is always playable from its first cue.
-      current.sections.push({
-        id: current.id + "-s0",
-        name: isSong ? "Start" : title || "Start",
-        time: cp.time,
-      });
     } else {
       current.sections.push({
         id: current.id + "-s" + current.sections.length,
@@ -47,29 +42,31 @@ export function buildSetlist(cuePoints) {
     }
   }
 
-  // Compute end times (next cue or +∞ for last) for progress display.
-  const flat = songs.flatMap((s) => s.sections.map((sec) => ({ song: s, sec })));
-  flat.sort((a, b) => a.sec.time - b.sec.time);
-  for (let i = 0; i < flat.length; i++) {
-    flat[i].sec.endTime = i + 1 < flat.length ? flat[i + 1].sec.time : null;
-  }
-  for (const song of songs) {
-    song.endTime = song.sections.length
-      ? song.sections[song.sections.length - 1].endTime
-      : null;
+  // Song end = next song's start (last song is open-ended → null).
+  for (let i = 0; i < songs.length; i++) {
+    songs[i].endTime = i + 1 < songs.length ? songs[i + 1].startTime : null;
+    // Section end = next section's start, or the song's end for the last one.
+    const secs = songs[i].sections;
+    for (let j = 0; j < secs.length; j++) {
+      secs[j].endTime = j + 1 < secs.length ? secs[j + 1].time : songs[i].endTime;
+    }
   }
 
   return songs;
 }
 
 // Given the setlist and current beat position, find the active song/section.
+// activeSong is determined by the song's time range (works even with no
+// sections); activeSection by the sections within the active song.
 export function locate(songs, songTime) {
   let activeSong = null;
   let activeSection = null;
   for (const song of songs) {
+    const inSong = songTime + 0.001 >= song.startTime && (song.endTime == null || songTime < song.endTime);
+    if (!inSong) continue;
+    activeSong = song.id;
     for (const sec of song.sections) {
       if (songTime + 0.001 >= sec.time && (sec.endTime == null || songTime < sec.endTime)) {
-        activeSong = song.id;
         activeSection = sec.id;
       }
     }
