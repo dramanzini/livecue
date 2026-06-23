@@ -1,9 +1,11 @@
 // Build a structured setlist from Ableton arrangement cue points (locators).
 //
 // LiveCue "Locator Notation":
-//   - A locator named "Song: <title>" starts a new song.
-//   - Any other locator is a SECTION of the current song.
-//   - A locator before the first "Song:" starts an untitled song.
+//   - If ANY locator is named "Song: <title>", it starts a new song and the
+//     locators after it become that song's SECTIONS.
+//   - If NO locator uses the "Song:" prefix, every locator is treated as its
+//     own song (the common case — one locator per song). This way you don't
+//     have to rename anything in Ableton.
 //
 // This mirrors how AbleSet turns arrangement locators into a navigable setlist.
 
@@ -13,9 +15,12 @@ export function buildSetlist(cuePoints) {
   const songs = [];
   let current = null;
 
+  // When no locator declares a song, each locator IS a song.
+  const usesSongPrefix = cuePoints.some((cp) => SONG_PREFIX.test(cp.name));
+
   for (const cp of cuePoints) {
-    const isSong = SONG_PREFIX.test(cp.name);
-    const title = isSong ? cp.name.replace(SONG_PREFIX, "").trim() : cp.name.trim();
+    const isSong = usesSongPrefix ? SONG_PREFIX.test(cp.name) : true;
+    const title = SONG_PREFIX.test(cp.name) ? cp.name.replace(SONG_PREFIX, "").trim() : cp.name.trim();
 
     if (isSong || !current) {
       current = {
