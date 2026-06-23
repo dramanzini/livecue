@@ -4,3 +4,10 @@ import App from "./App.jsx";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(<App />);
+
+// Register the service worker so LiveCue is installable as a PWA.
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
