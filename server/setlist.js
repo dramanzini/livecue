@@ -1,0 +1,77 @@
+// Build a structured setlist from Ableton arrangement cue points (locators).
+//
+// LiveCue "Locator Notation":
+//   - A locator named "Song: <title>" starts a new song.
+//   - Any other locator is a SECTION of the current song.
+//   - A locator before the first "Song:" starts an untitled song.
+//
+// This mirrors how AbleSet turns arrangement locators into a navigable setlist.
+
+const SONG_PREFIX = /^song:\s*/i;
+
+export function buildSetlist(cuePoints) {
+  const songs = [];
+  let current = null;
+
+  for (const cp of cuePoints) {
+    const isSong = SONG_PREFIX.test(cp.name);
+    const title = isSong ? cp.name.replace(SONG_PREFIX, "").trim() : cp.name.trim();
+
+    if (isSong || !current) {
+      current = {
+        id: slug(isSong ? title : `song-${songs.length + 1}`) + "-" + songs.length,
+        title: isSong ? title : title || `Song ${songs.length + 1}`,
+        startTime: cp.time,
+        sections: [],
+      };
+      songs.push(current);
+      // A "Song:" locator also acts as the first section boundary only if it has
+      // its own label distinct from a following section. We push it as a section
+      // so the song is always playable from its first cue.
+      current.sections.push({
+        id: current.id + "-s0",
+        name: isSong ? "Start" : title || "Start",
+        time: cp.time,
+      });
+    } else {
+      current.sections.push({
+        id: current.id + "-s" + current.sections.length,
+        name: title,
+        time: cp.time,
+      });
+    }
+  }
+
+  // Compute end times (next cue or +∞ for last) for progress display.
+  const flat = songs.flatMap((s) => s.sections.map((sec) => ({ song: s, sec })));
+  flat.sort((a, b) => a.sec.time - b.sec.time);
+  for (let i = 0; i < flat.length; i++) {
+    flat[i].sec.endTime = i + 1 < flat.length ? flat[i + 1].sec.time : null;
+  }
+  for (const song of songs) {
+    song.endTime = song.sections.length
+      ? song.sections[song.sections.length - 1].endTime
+      : null;
+  }
+
+  return songs;
+}
+
+// Given the setlist and current beat position, find the active song/section.
+export function locate(songs, songTime) {
+  let activeSong = null;
+  let activeSection = null;
+  for (const song of songs) {
+    for (const sec of song.sections) {
+      if (songTime + 0.001 >= sec.time && (sec.endTime == null || songTime < sec.endTime)) {
+        activeSong = song.id;
+        activeSection = sec.id;
+      }
+    }
+  }
+  return { activeSong, activeSection };
+}
+
+function slug(s) {
+  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "song";
+}
