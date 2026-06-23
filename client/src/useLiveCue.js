@@ -11,24 +11,47 @@ export function useLiveCue() {
   const [connection, setConnection] = useState({ connected: false, simulated: false });
   const [online, setOnline] = useState(false);
   const wsRef = useRef(null);
+  const outboxRef = useRef([]);   // commands issued while disconnected
+  const lastPongRef = useRef(0);
 
   useEffect(() => {
     let stop = false;
     let retry;
+    const OUTBOX_TTL = 6000; // drop queued commands older than this
+
+    function flushOutbox() {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== 1) return;
+      const now = Date.now();
+      const pending = outboxRef.current;
+      outboxRef.current = [];
+      for (const { t, obj } of pending) {
+        if (now - t <= OUTBOX_TTL) ws.send(JSON.stringify(obj));
+      }
+    }
 
     function connect() {
+      if (stop) return;
+      const cur = wsRef.current;
+      if (cur && (cur.readyState === 0 || cur.readyState === 1)) return; // already (re)connecting
       const proto = location.protocol === "https:" ? "wss" : "ws";
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       wsRef.current = ws;
 
-      ws.onopen = () => setOnline(true);
+      ws.onopen = () => {
+        setOnline(true);
+        lastPongRef.current = Date.now();
+        flushOutbox(); // deliver anything tapped while we were reconnecting
+      };
       ws.onclose = () => {
         setOnline(false);
         if (!stop) retry = setTimeout(connect, 1000);
       };
+      ws.onerror = () => { try { ws.close(); } catch {} };
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         switch (msg.type) {
+          case "pong": lastPongRef.current = Date.now(); break;
           case "setlist":
             setSetlist(msg.setlist || []);
             if (msg.lyrics) setLyrics(msg.lyrics);
@@ -46,13 +69,48 @@ export function useLiveCue() {
       };
     }
 
+    // Heartbeat: ping regularly; if the socket looks dead (no pong, or not open)
+    // while the page is visible, force a reconnect. iOS silently suspends
+    // background sockets, so this is what recovers them.
+    const hb = setInterval(() => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === 1) {
+        try { ws.send(JSON.stringify({ type: "ping" })); } catch {}
+        if (Date.now() - lastPongRef.current > 12000) { try { ws.close(); } catch {} }
+      } else if (document.visibilityState === "visible") {
+        connect();
+      }
+    }, 4000);
+
+    // Reconnect immediately when the user returns to the app.
+    const wake = () => {
+      const ws = wsRef.current;
+      if (document.visibilityState === "visible" && (!ws || ws.readyState > 1)) connect();
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", wake);
+
     connect();
-    return () => { stop = true; clearTimeout(retry); wsRef.current?.close(); };
+    return () => {
+      stop = true;
+      clearTimeout(retry);
+      clearInterval(hb);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", wake);
+      wsRef.current?.close();
+    };
   }, []);
 
   const send = useCallback((obj) => {
     const ws = wsRef.current;
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+    if (ws && ws.readyState === 1) {
+      ws.send(JSON.stringify(obj));
+    } else {
+      // Don't drop the user's action — queue it and let reconnect flush it.
+      outboxRef.current.push({ t: Date.now(), obj });
+    }
   }, []);
 
   const cmd = {

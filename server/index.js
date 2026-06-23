@@ -87,6 +87,12 @@ wss.on("connection", async (ws) => {
   ws.on("message", (raw) => {
     let cmd;
     try { cmd = JSON.parse(raw); } catch { return; }
+    if (cmd.type === "ping") {
+      // Heartbeat: lets clients detect a half-dead socket (iOS background) and
+      // reconnect. Reply only to the sender.
+      try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
+      return;
+    }
     handleCommand(cmd);
   });
 });
